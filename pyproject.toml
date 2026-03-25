@@ -1,0 +1,21 @@
+[project]
+name = "resume_parser"
+version = "0.1.0"
+description = "AI-powered resume parsing and summarization for Frappe HRMS Job Applicants"
+authors = [
+    { name = "Tej", email = "tjs.kutnikar@gmail.com" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "PyMuPDF>=1.23.0",
+]
+
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.bench.frappe-dependencies]
+frappe = ">=16.0.0"
+erpnext = ">=16.0.0"
+hrms = ">=16.0.0"
