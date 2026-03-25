@@ -17,7 +17,6 @@ CUSTOM_FIELDS = {
             "fieldtype": "Section Break",
             "insert_after": "notes",
             "collapsible": 0,
-            "module": "Resume Parser",
         },
         {
             "fieldname": "resume_parse_status",
@@ -27,7 +26,6 @@ CUSTOM_FIELDS = {
             "insert_after": "resume_parser_section",
             "read_only": 1,
             "no_copy": 1,
-            "module": "Resume Parser",
         },
         {
             "fieldname": "resume_parsed_on",
@@ -36,13 +34,11 @@ CUSTOM_FIELDS = {
             "insert_after": "resume_parse_status",
             "read_only": 1,
             "no_copy": 1,
-            "module": "Resume Parser",
         },
         {
             "fieldname": "resume_parser_col_break",
             "fieldtype": "Column Break",
             "insert_after": "resume_parsed_on",
-            "module": "Resume Parser",
         },
         {
             "fieldname": "resume_ai_summary",
@@ -51,7 +47,6 @@ CUSTOM_FIELDS = {
             "insert_after": "resume_parser_col_break",
             "read_only": 1,
             "no_copy": 1,
-            "module": "Resume Parser",
         },
     ]
 }
@@ -68,6 +63,7 @@ def before_uninstall():
     for doctype, fields in CUSTOM_FIELDS.items():
         for field in fields:
             fieldname = field.get("fieldname")
-            if frappe.db.exists("Custom Field", {"dt": doctype, "fieldname": fieldname}):
-                frappe.delete_doc("Custom Field", f"{doctype}-{fieldname}", force=True)
+            custom_field_name = f"{doctype}-{fieldname}"
+            if frappe.db.exists("Custom Field", custom_field_name):
+                frappe.delete_doc("Custom Field", custom_field_name, force=True)
     frappe.db.commit()

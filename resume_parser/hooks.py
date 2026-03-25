@@ -10,14 +10,6 @@ required_apps = ["frappe", "erpnext", "hrms"]
 after_install = "resume_parser.setup.after_install"
 before_uninstall = "resume_parser.setup.before_uninstall"
 
-# ---------- Custom Fields (injected into Job Applicant) ----------
-fixtures = [
-    {
-        "dt": "Custom Field",
-        "filters": [["module", "=", "Resume Parser"]],
-    }
-]
-
 # ---------- Doc Events ----------
 doc_events = {
     "Job Applicant": {
