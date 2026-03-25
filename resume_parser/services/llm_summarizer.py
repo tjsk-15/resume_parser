@@ -2,12 +2,11 @@
 LLM-based resume summarization service.
 
 Supports OpenRouter (recommended for cloud hosting), Groq, and HuggingFace.
-Uses the `requests` library (bundled with Frappe) for reliable HTTP calls.
+Uses frappe.integrations.utils for HTTP calls (guaranteed to work on Frappe Cloud).
 """
 
 import frappe
 import json
-import requests
 
 
 # ---------------------------------------------------------------------------
@@ -112,58 +111,37 @@ def summarize_resume(resume_text: str) -> str:
         headers["X-Title"] = "Frappe Resume Parser"
 
     try:
-        response = requests.post(
+        import requests as req_lib
+        logger.info(f"[RESUME PARSER] Making POST request to {url}")
+
+        response = req_lib.post(
             url,
             json=payload,
             headers=headers,
             timeout=90,
         )
 
-        logger.info(f"[RESUME PARSER] Response status: {response.status_code}")
-        logger.info(f"[RESUME PARSER] Response body (first 500 chars): {response.text[:500]}")
+        status_code = response.status_code
+        body = response.text
 
-        if response.status_code == 200:
+        logger.info(f"[RESUME PARSER] Status: {status_code}, Body (first 500): {body[:500]}")
+
+        if status_code == 200:
             result = response.json()
             summary = result["choices"][0]["message"]["content"]
             logger.info("[RESUME PARSER] Summary generated successfully")
             return summary.strip()
 
-        # Handle errors — always include provider + URL + status + body
-        error_body = response.text[:500]
-        error_detail = f"[{provider_name}] {url} returned {response.status_code}: {error_body}"
+        # All error paths include full context
+        error_detail = f"[{provider_name}] {url} returned {status_code}: {body[:300]}"
         logger.error(f"[RESUME PARSER] {error_detail}")
-
-        if response.status_code == 401:
-            frappe.throw(f"Invalid {provider_name} API key. Check Resume Parser Settings.")
-        elif response.status_code == 403 and "1010" in error_body:
-            frappe.throw(
-                f"{provider_name} blocked this server (Cloudflare 1010). "
-                "Switch to OpenRouter in Resume Parser Settings."
-            )
-        elif response.status_code == 429:
-            frappe.throw(
-                f"[{provider_name}] Rate limit exceeded (429). "
-                f"Response: {error_body[:200]}"
-            )
-        else:
-            frappe.throw(error_detail)
-
-    except requests.exceptions.Timeout:
-        msg = f"[{provider_name}] Request to {url} timed out after 90s"
-        logger.error(f"[RESUME PARSER] {msg}")
-        frappe.throw(msg)
-
-    except requests.exceptions.ConnectionError as e:
-        msg = f"[{provider_name}] Connection to {url} failed: {str(e)[:200]}"
-        logger.error(f"[RESUME PARSER] {msg}")
-        frappe.throw(msg)
+        frappe.throw(error_detail)
 
     except frappe.exceptions.ValidationError:
-        # Re-raise frappe.throw() errors without wrapping
         raise
 
     except Exception as e:
-        msg = f"[{provider_name}] {type(e).__name__}: {str(e)[:200]}"
+        msg = f"[{provider_name}] {url} — {type(e).__name__}: {str(e)[:300]}"
         logger.error(f"[RESUME PARSER] {msg}")
         frappe.throw(msg)
 
