@@ -57,15 +57,6 @@ Keep the summary under 300 words. Be factual — only include information presen
 def summarize_resume(resume_text: str) -> str:
     """
     Send resume text to the configured LLM provider and return a structured summary.
-
-    Args:
-        resume_text: Plain text extracted from the resume PDF
-
-    Returns:
-        Structured summary string
-
-    Raises:
-        frappe.ValidationError: If API call fails or settings are missing
     """
     logger = frappe.logger("resume_parser")
 
@@ -74,7 +65,7 @@ def summarize_resume(resume_text: str) -> str:
     api_key = settings.get("api_key")
     custom_model = settings.get("model_name")
 
-    logger.info(f"Using LLM provider: {provider_name}")
+    logger.info(f"[RESUME PARSER] Provider: {provider_name}, API key length: {len(api_key) if api_key else 0}")
 
     if not api_key:
         frappe.throw(
@@ -90,9 +81,9 @@ def summarize_resume(resume_text: str) -> str:
     model = custom_model or provider["default_model"]
     url = provider["url"].format(model=model)
 
-    logger.info(f"Calling {url} with model {model}")
+    logger.info(f"[RESUME PARSER] URL: {url}, Model: {model}")
 
-    # Truncate very long resumes to avoid token limits (approx 12k tokens)
+    # Truncate very long resumes to avoid token limits
     max_chars = 15000
     if len(resume_text) > max_chars:
         resume_text = resume_text[:max_chars] + "\n\n[Resume truncated due to length]"
@@ -128,59 +119,53 @@ def summarize_resume(resume_text: str) -> str:
             timeout=90,
         )
 
-        logger.info(f"Response status: {response.status_code}")
+        logger.info(f"[RESUME PARSER] Response status: {response.status_code}")
+        logger.info(f"[RESUME PARSER] Response body (first 500 chars): {response.text[:500]}")
 
         if response.status_code == 200:
             result = response.json()
             summary = result["choices"][0]["message"]["content"]
-            logger.info("Resume summary generated successfully")
+            logger.info("[RESUME PARSER] Summary generated successfully")
             return summary.strip()
 
-        # Handle errors
+        # Handle errors — always include provider + URL + status + body
         error_body = response.text[:500]
-        logger.error(f"LLM API error ({response.status_code}): {error_body}")
+        error_detail = f"[{provider_name}] {url} returned {response.status_code}: {error_body}"
+        logger.error(f"[RESUME PARSER] {error_detail}")
 
         if response.status_code == 401:
-            frappe.throw(
-                f"Invalid {provider_name} API key. "
-                "Please check your Resume Parser Settings."
-            )
+            frappe.throw(f"Invalid {provider_name} API key. Check Resume Parser Settings.")
         elif response.status_code == 403 and "1010" in error_body:
             frappe.throw(
-                f"{provider_name} is blocking requests from this server "
-                "(Cloudflare error 1010). Switch to OpenRouter in "
-                "Resume Parser Settings."
+                f"{provider_name} blocked this server (Cloudflare 1010). "
+                "Switch to OpenRouter in Resume Parser Settings."
             )
         elif response.status_code == 429:
             frappe.throw(
-                "LLM API rate limit exceeded. The summary will be retried "
-                "automatically. You can also click 'Parse Resume' to retry manually."
+                f"[{provider_name}] Rate limit exceeded (429). "
+                f"Response: {error_body[:200]}"
             )
         else:
-            frappe.throw(
-                f"LLM API error ({response.status_code}): {error_body}"
-            )
+            frappe.throw(error_detail)
 
     except requests.exceptions.Timeout:
-        logger.error("LLM API request timed out after 90 seconds")
-        frappe.throw(
-            f"{provider_name} API request timed out. "
-            "Click 'Parse Resume' to retry."
-        )
+        msg = f"[{provider_name}] Request to {url} timed out after 90s"
+        logger.error(f"[RESUME PARSER] {msg}")
+        frappe.throw(msg)
 
     except requests.exceptions.ConnectionError as e:
-        logger.error(f"LLM API connection failed: {e}")
-        frappe.throw(
-            f"Could not connect to {provider_name} API. "
-            f"Connection error: {str(e)[:200]}"
-        )
+        msg = f"[{provider_name}] Connection to {url} failed: {str(e)[:200]}"
+        logger.error(f"[RESUME PARSER] {msg}")
+        frappe.throw(msg)
+
+    except frappe.exceptions.ValidationError:
+        # Re-raise frappe.throw() errors without wrapping
+        raise
 
     except Exception as e:
-        logger.error(f"Unexpected error calling LLM API: {type(e).__name__}: {e}")
-        frappe.throw(
-            f"Unexpected error: {type(e).__name__}: {str(e)[:200]}. "
-            "Check Error Log for details."
-        )
+        msg = f"[{provider_name}] {type(e).__name__}: {str(e)[:200]}"
+        logger.error(f"[RESUME PARSER] {msg}")
+        frappe.throw(msg)
 
 
 def _get_settings() -> dict:

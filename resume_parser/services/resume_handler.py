@@ -7,6 +7,7 @@ and generate AI summaries.
 
 import frappe
 from frappe import _
+from frappe.exceptions import ValidationError
 
 
 def on_applicant_save(doc, method):
@@ -54,10 +55,10 @@ def parse_and_summarize(applicant_name: str, resume_url: str):
     from resume_parser.services.pdf_extractor import extract_text_from_pdf
     from resume_parser.services.llm_summarizer import summarize_resume
 
+    logger = frappe.logger("resume_parser")
+
     try:
-        frappe.logger("resume_parser").info(
-            f"Parsing resume for {applicant_name}: {resume_url}"
-        )
+        logger.info(f"Parsing resume for {applicant_name}: {resume_url}")
 
         # Step 1: Extract text from PDF
         resume_text = extract_text_from_pdf(resume_url)
@@ -65,11 +66,13 @@ def parse_and_summarize(applicant_name: str, resume_url: str):
         if not resume_text or len(resume_text.strip()) < 20:
             _update_summary(
                 applicant_name,
-                "⚠ Could not extract meaningful text from the resume. "
+                "Could not extract meaningful text from the resume. "
                 "The file may be image-based or corrupted.",
                 status="Failed",
             )
             return
+
+        logger.info(f"Extracted {len(resume_text)} chars from resume")
 
         # Step 2: Summarize with LLM
         summary = summarize_resume(resume_text)
@@ -77,9 +80,7 @@ def parse_and_summarize(applicant_name: str, resume_url: str):
         # Step 3: Save summary to Job Applicant
         _update_summary(applicant_name, summary, status="Completed")
 
-        frappe.logger("resume_parser").info(
-            f"Resume summary completed for {applicant_name}"
-        )
+        logger.info(f"Resume summary completed for {applicant_name}")
 
         # Notify the user via realtime
         frappe.publish_realtime(
@@ -94,13 +95,22 @@ def parse_and_summarize(applicant_name: str, resume_url: str):
             after_commit=True,
         )
 
-    except Exception as e:
-        frappe.logger("resume_parser").error(
-            f"Resume parsing failed for {applicant_name}: {str(e)}"
-        )
+    except ValidationError as e:
+        # frappe.throw() raises ValidationError — pass through the message directly
+        error_msg = str(e)
+        logger.error(f"Resume parsing failed for {applicant_name}: {error_msg}")
         _update_summary(
             applicant_name,
-            f"⚠ Parsing failed: {str(e)}. Click 'Parse Resume' to retry.",
+            f"Parsing failed: {error_msg}. Click 'Parse Resume' to retry.",
+            status="Failed",
+        )
+
+    except Exception as e:
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        logger.error(f"Resume parsing failed for {applicant_name}: {error_msg}")
+        _update_summary(
+            applicant_name,
+            f"Parsing failed: {error_msg}. Click 'Parse Resume' to retry.",
             status="Failed",
         )
 
