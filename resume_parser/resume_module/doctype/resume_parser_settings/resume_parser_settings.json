@@ -15,8 +15,8 @@
             "fieldname": "llm_provider",
             "fieldtype": "Select",
             "label": "LLM Provider",
-            "options": "Groq\nOpenRouter\nHuggingFace",
-            "default": "Groq",
+            "options": "OpenRouter\nGroq\nHuggingFace",
+            "default": "OpenRouter",
             "reqd": 1,
             "description": "Select the free LLM API provider to use for resume summarization"
         },
@@ -42,7 +42,7 @@
             "fieldname": "setup_instructions",
             "fieldtype": "HTML",
             "label": "",
-            "options": "<div class='alert alert-info'><h5>How to get a free API key:</h5><ul><li><b>Groq (Recommended):</b> Sign up at <a href='https://console.groq.com' target='_blank'>console.groq.com</a> → API Keys → Create. Free tier: 30 req/min.</li><li><b>OpenRouter:</b> Sign up at <a href='https://openrouter.ai' target='_blank'>openrouter.ai</a> → Keys. Free models available.</li><li><b>HuggingFace:</b> Sign up at <a href='https://huggingface.co/settings/tokens' target='_blank'>huggingface.co</a> → Access Tokens. Free Inference API.</li></ul></div>"
+            "options": "<div class='alert alert-info'><h5>How to get a free API key:</h5><ul><li><b>OpenRouter (Recommended for cloud hosting):</b> Sign up at <a href='https://openrouter.ai' target='_blank'>openrouter.ai</a> → Keys. Free Llama models available. Works from Frappe Cloud servers.</li><li><b>Groq:</b> Sign up at <a href='https://console.groq.com' target='_blank'>console.groq.com</a> → API Keys → Create. Free tier: 30 req/min. <em>May not work from cloud-hosted servers (Cloudflare blocks).</em></li><li><b>HuggingFace:</b> Sign up at <a href='https://huggingface.co/settings/tokens' target='_blank'>huggingface.co</a> → Access Tokens. Free Inference API.</li></ul></div>"
         }
     ],
     "issingle": 1,
