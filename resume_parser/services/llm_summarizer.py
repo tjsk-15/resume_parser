@@ -131,6 +131,7 @@ def _call_anthropic(req_lib, logger, provider, api_key, custom_model, resume_tex
     payload = {
         "model": model,
         "max_tokens": 1024,
+        "temperature": 0,
         "system": SYSTEM_PROMPT,
         "messages": [
             {
@@ -216,8 +217,9 @@ def _call_openai_compat(req_lib, logger, provider, provider_name, api_key, custo
                         "content": f"Please analyze and summarize the following resume:\n\n{resume_text}",
                     },
                 ],
-                "temperature": 0.3,
+                "temperature": 0,
                 "max_tokens": 1024,
+                "seed": 42,
             }
 
             try:
