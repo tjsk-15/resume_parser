@@ -1,7 +1,7 @@
 """
 LLM-based resume summarization service.
 
-Supports OpenRouter (recommended for cloud hosting), Groq, and HuggingFace.
+Supports Anthropic (Claude), OpenRouter, Groq, and HuggingFace.
 Includes automatic retry with fallback models when free models are rate-limited.
 """
 
@@ -14,25 +14,34 @@ import time
 # Provider configurations
 # ---------------------------------------------------------------------------
 PROVIDERS = {
+    "Anthropic": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "default_model": "claude-sonnet-4-20250514",
+        "fallback_models": [],
+        "is_anthropic": True,
+    },
     "OpenRouter": {
         "url": "https://openrouter.ai/api/v1/chat/completions",
-        "default_model": "google/gemma-3-27b-it:free",
+        "default_model": "nvidia/nemotron-3-super-120b-a12b:free",
         "fallback_models": [
-            "google/gemma-3-27b-it:free",
-            "mistralai/mistral-small-3.1-24b-instruct:free",
-            "qwen/qwen3-32b:free",
-            "meta-llama/llama-3.3-70b-instruct:free",
+            "nvidia/nemotron-3-super-120b-a12b:free",
+            "minimax/minimax-m2.5:free",
+            "nvidia/nemotron-3-nano-30b-a3b:free",
+            "arcee-ai/trinity-large-preview:free",
         ],
+        "is_anthropic": False,
     },
     "Groq": {
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "default_model": "llama-3.3-70b-versatile",
         "fallback_models": [],
+        "is_anthropic": False,
     },
     "HuggingFace": {
         "url": "https://api-inference.huggingface.co/models/{model}/v1/chat/completions",
         "default_model": "meta-llama/Llama-3.3-70B-Instruct",
         "fallback_models": [],
+        "is_anthropic": False,
     },
 }
 
@@ -76,7 +85,7 @@ def summarize_resume(resume_text: str) -> str:
     logger = frappe.logger("resume_parser")
 
     settings = _get_settings()
-    provider_name = settings.get("llm_provider", "OpenRouter")
+    provider_name = settings.get("llm_provider", "Anthropic")
     api_key = settings.get("api_key")
     custom_model = settings.get("model_name")
 
@@ -93,6 +102,83 @@ def summarize_resume(resume_text: str) -> str:
     if not provider:
         frappe.throw(f"Unknown LLM provider: {provider_name}")
 
+    # Truncate very long resumes to avoid token limits
+    max_chars = 15000
+    if len(resume_text) > max_chars:
+        resume_text = resume_text[:max_chars] + "\n\n[Resume truncated due to length]"
+
+    # --- Anthropic uses a different API format ---
+    if provider.get("is_anthropic"):
+        return _call_anthropic(req_lib, logger, provider, api_key, custom_model, resume_text)
+
+    # --- OpenAI-compatible providers (OpenRouter, Groq, HuggingFace) ---
+    return _call_openai_compat(req_lib, logger, provider, provider_name, api_key, custom_model, resume_text)
+
+
+def _call_anthropic(req_lib, logger, provider, api_key, custom_model, resume_text):
+    """Call the Anthropic Messages API."""
+    model = custom_model or provider["default_model"]
+    url = provider["url"]
+
+    logger.info(f"[RESUME PARSER] Calling Anthropic: {url}, model: {model}")
+
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+    }
+
+    payload = {
+        "model": model,
+        "max_tokens": 1024,
+        "system": SYSTEM_PROMPT,
+        "messages": [
+            {
+                "role": "user",
+                "content": f"Please analyze and summarize the following resume:\n\n{resume_text}",
+            }
+        ],
+    }
+
+    try:
+        response = req_lib.post(url, json=payload, headers=headers, timeout=90)
+        status_code = response.status_code
+        body = response.text
+
+        logger.info(f"[RESUME PARSER] Anthropic returned {status_code}")
+
+        if status_code == 200:
+            result = response.json()
+            # Anthropic returns content as a list of blocks
+            content_blocks = result.get("content", [])
+            summary = ""
+            for block in content_blocks:
+                if block.get("type") == "text":
+                    summary += block.get("text", "")
+            logger.info("[RESUME PARSER] Success with Anthropic")
+            return summary.strip()
+
+        error_detail = f"[Anthropic] {model} returned {status_code}: {body[:300]}"
+        logger.error(f"[RESUME PARSER] {error_detail}")
+
+        if status_code == 401:
+            frappe.throw("Invalid Anthropic API key. Check Resume Parser Settings.")
+        elif status_code == 429:
+            frappe.throw(f"[Anthropic] Rate limit exceeded. Please wait a moment and retry. Details: {body[:200]}")
+        else:
+            frappe.throw(error_detail)
+
+    except frappe.exceptions.ValidationError:
+        raise
+
+    except Exception as e:
+        msg = f"[Anthropic] {type(e).__name__}: {str(e)[:300]}"
+        logger.error(f"[RESUME PARSER] {msg}")
+        frappe.throw(msg)
+
+
+def _call_openai_compat(req_lib, logger, provider, provider_name, api_key, custom_model, resume_text):
+    """Call OpenAI-compatible providers (OpenRouter, Groq, HuggingFace) with fallback."""
     url = provider["url"]
 
     # Build the list of models to try
@@ -104,11 +190,6 @@ def summarize_resume(resume_text: str) -> str:
             models_to_try = list(fallbacks)
         else:
             models_to_try = [provider["default_model"]]
-
-    # Truncate very long resumes to avoid token limits
-    max_chars = 15000
-    if len(resume_text) > max_chars:
-        resume_text = resume_text[:max_chars] + "\n\n[Resume truncated due to length]"
 
     headers = {
         "Content-Type": "application/json",
@@ -141,10 +222,7 @@ def summarize_resume(resume_text: str) -> str:
 
             try:
                 response = req_lib.post(
-                    model_url,
-                    json=payload,
-                    headers=headers,
-                    timeout=90,
+                    model_url, json=payload, headers=headers, timeout=90,
                 )
 
                 status_code = response.status_code
@@ -158,19 +236,18 @@ def summarize_resume(resume_text: str) -> str:
                     logger.info(f"[RESUME PARSER] Success with {model}")
                     return summary.strip()
 
-                if status_code == 429:
-                    last_error = f"[{provider_name}] {model} rate-limited (429)"
-                    logger.warning(f"[RESUME PARSER] {last_error}, body: {body[:200]}")
+                if status_code in (429, 404):
+                    # 429 = rate limited, 404 = model not available — try next
+                    last_error = f"[{provider_name}] {model} returned {status_code}: {body[:200]}"
+                    logger.warning(f"[RESUME PARSER] {last_error}")
 
-                    if attempt < MAX_RETRIES_PER_MODEL:
+                    if attempt < MAX_RETRIES_PER_MODEL and status_code == 429:
                         time.sleep(RETRY_DELAY_SECONDS)
                         continue
                     else:
-                        # Move to next fallback model
-                        logger.info(f"[RESUME PARSER] {model} exhausted retries, trying next model")
                         break
 
-                # Non-429 error — don't retry, report immediately
+                # Other errors — report immediately
                 error_detail = f"[{provider_name}] {model} returned {status_code}: {body[:300]}"
                 logger.error(f"[RESUME PARSER] {error_detail}")
                 frappe.throw(error_detail)
@@ -190,9 +267,9 @@ def summarize_resume(resume_text: str) -> str:
 
     # All models exhausted
     frappe.throw(
-        f"All models rate-limited. Last error: {last_error}. "
-        "Try again in a few minutes, or add credits to your OpenRouter account "
-        "to remove free-tier rate limits."
+        f"All models failed. Last error: {last_error}. "
+        "Try again in a few minutes, or switch to Anthropic (Claude) "
+        "in Resume Parser Settings for reliable results."
     )
 
 

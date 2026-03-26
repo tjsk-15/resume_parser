@@ -15,10 +15,10 @@
             "fieldname": "llm_provider",
             "fieldtype": "Select",
             "label": "LLM Provider",
-            "options": "OpenRouter\nGroq\nHuggingFace",
-            "default": "OpenRouter",
+            "options": "Anthropic\nOpenRouter\nGroq\nHuggingFace",
+            "default": "Anthropic",
             "reqd": 1,
-            "description": "Select the free LLM API provider to use for resume summarization"
+            "description": "Select the LLM API provider to use for resume summarization"
         },
         {
             "fieldname": "api_key",
@@ -31,7 +31,7 @@
             "fieldname": "model_name",
             "fieldtype": "Data",
             "label": "Model Name (Optional)",
-            "description": "Leave blank to use the default model for the selected provider. Groq: llama-3.3-70b-versatile, OpenRouter: meta-llama/llama-3.3-70b-instruct:free"
+            "description": "Leave blank to use the default model. Anthropic: claude-sonnet-4-20250514, OpenRouter: nvidia/nemotron-3-super-120b-a12b:free"
         },
         {
             "fieldname": "sb_info",
@@ -42,7 +42,7 @@
             "fieldname": "setup_instructions",
             "fieldtype": "HTML",
             "label": "",
-            "options": "<div class='alert alert-info'><h5>How to get a free API key:</h5><ul><li><b>OpenRouter (Recommended for cloud hosting):</b> Sign up at <a href='https://openrouter.ai' target='_blank'>openrouter.ai</a> → Keys. Free Llama models available. Works from Frappe Cloud servers.</li><li><b>Groq:</b> Sign up at <a href='https://console.groq.com' target='_blank'>console.groq.com</a> → API Keys → Create. Free tier: 30 req/min. <em>May not work from cloud-hosted servers (Cloudflare blocks).</em></li><li><b>HuggingFace:</b> Sign up at <a href='https://huggingface.co/settings/tokens' target='_blank'>huggingface.co</a> → Access Tokens. Free Inference API.</li></ul></div>"
+            "options": "<div class='alert alert-info'><h5>How to get an API key:</h5><ul><li><b>Anthropic (Recommended):</b> Go to <a href='https://console.anthropic.com/settings/keys' target='_blank'>console.anthropic.com</a> → API Keys → Create Key. Uses Claude Sonnet by default. Reliable, no rate-limit issues.</li><li><b>OpenRouter (Free tier):</b> Sign up at <a href='https://openrouter.ai' target='_blank'>openrouter.ai</a> → Keys. Free models available but may be rate-limited.</li><li><b>Groq:</b> Sign up at <a href='https://console.groq.com' target='_blank'>console.groq.com</a> → API Keys. <em>May not work from cloud-hosted servers.</em></li><li><b>HuggingFace:</b> <a href='https://huggingface.co/settings/tokens' target='_blank'>huggingface.co</a> → Access Tokens.</li></ul></div>"
         }
     ],
     "issingle": 1,
